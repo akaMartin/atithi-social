@@ -1,3 +1,11 @@
+# Friendica runtime files
+friendica/storage/
+friendica/proxy/
+friendica/photo/
+
+# OS noise
+.DS_Store
+
 # Logs
 logs
 *.log
