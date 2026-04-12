@@ -1,0 +1,116 @@
+# Atithi Social – Friendica instance
+# All secrets are sourced from .env (never hardcoded here).
+# The .env file is also the Docker Compose interpolation source for ${VAR} syntax.
+ 
+services:
+ 
+  # ─── MariaDB ──────────────────────────────────────────────────────────────
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - backend
+    healthcheck:
+      # healthcheck.sh is bundled with MariaDB 11 images
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+ 
+  # ─── Redis (cache + lock backend) ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    env_file: .env
+    # $$REDIS_PASSWORD: the $$ escapes Compose interpolation; the running shell
+    # inside the container expands $REDIS_PASSWORD from the container env.
+    command: >
+      sh -c "redis-server
+             --requirepass $$REDIS_PASSWORD
+             --appendonly yes
+             --loglevel notice"
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+ 
+  # ─── Friendica ────────────────────────────────────────────────────────────
+  friendica:
+    image: friendica:stable
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Instance identity
+      FRIENDICA_URL: ${FRIENDICA_URL}
+      FRIENDICA_TZ: ${FRIENDICA_TZ}
+      FRIENDICA_LANG: ${FRIENDICA_LANG}
+      FRIENDICA_SITENAME: ${FRIENDICA_SITENAME}
+      FRIENDICA_ADMIN_MAIL: ${FRIENDICA_ADMIN_MAIL}
+ 
+      # Database – "db" resolves to the MariaDB service over the backend network
+      MYSQL_HOST: db
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+ 
+      # Redis – "redis" resolves to the Redis service over the backend network
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+ 
+      # SMTP (leave blank to disable outbound mail)
+      SMTP: ${SMTP:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_DOMAIN: ${SMTP_DOMAIN:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_AUTH: ${SMTP_AUTH:-LOGIN}
+      SMTP_SECURE: ${SMTP_SECURE:-tls}
+ 
+    volumes:
+      # Persist the entire Friendica web root (config, uploads, addons, cache…)
+      - friendica_html:/var/www/html
+      # Bind-mount theme and addon customisations so they are version-controlled
+      - ./friendica/themes:/var/www/html/view/theme/custom:ro
+      - ./friendica/addons:/var/www/html/addon/custom:ro
+ 
+    networks:
+      - backend
+    ports:
+      # Bind only on loopback; Nginx reverse-proxies from the outside world
+      - "127.0.0.1:8080:80"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+ 
+# ─── Named volumes ────────────────────────────────────────────────────────────
+volumes:
+  db_data:
+  redis_data:
+  friendica_html:
+ 
+# ─── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  backend:
+    driver: bridge
