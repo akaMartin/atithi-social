@@ -1,0 +1,17 @@
+<?php
+// PHPMailer addon configuration
+// Copy this file to config/addon.config.php and fill in your real values.
+// addon.config.php is gitignored — never commit it.
+
+return [
+    'phpmailer' => [
+        'smtp' => true,
+        'smtp_server' => 'smtp.resend.com',
+        'smtp_port' => 587,
+        'smtp_secure' => 'tls',
+        'smtp_port_s' => 465,
+        'smtp_username' => 'resend',
+        'smtp_password' => 'YOUR_RESEND_API_KEY',
+        'smtp_from' => 'noreply@contact.atithi.social',
+    ],
+];
