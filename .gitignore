@@ -147,4 +147,4 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 # Local configurations
-config/addon.config.php
+friendica/config/addon.config.php
